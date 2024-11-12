@@ -4,8 +4,11 @@ const mongoose = require('mongoose');
 const app = express();
 const authRoutes = require('./routes/auth');
 const expenseRoutes = require('./routes/expense');
+const cors = require('cors');
 
 app.use(express.json());
+// Enable CORS for all routes
+app.use(cors());
 
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB'))

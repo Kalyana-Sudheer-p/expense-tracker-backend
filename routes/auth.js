@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/Users');
+const auth = require('../middleware/auth.js');
 const router = express.Router();
 
 // Registration Route
@@ -36,6 +37,16 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
+});
+
+// Dashboard route (protected)
+router.get('/dashboard', auth, (req, res) => {
+  // Assume user data is available from auth middleware
+  const userData = req.user; 
+  res.json({
+    message: 'Welcome to your dashboard!',
+    user: userData,
+  });
 });
 
 module.exports = router;

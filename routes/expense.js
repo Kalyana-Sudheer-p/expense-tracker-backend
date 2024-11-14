@@ -49,4 +49,19 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+router.get('/edit/:id', auth, async (req, res) => {
+  try {
+      const expense = await Expense.findById(req.params.id);
+      if (!expense) {
+          console.log("Expense not found");
+          return res.status(404).json({ message: "Expense not found" });
+      }
+      console.log("Expense found:", expense);
+      res.json(expense);
+  } catch (error) {
+      console.error("Error fetching expense:", error);
+      res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;

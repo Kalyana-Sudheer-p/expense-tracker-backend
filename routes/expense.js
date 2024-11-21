@@ -2,24 +2,55 @@ const express = require('express');
 const Expense = require('../models/Expense');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const Category = require('../models/Category');
+const User = require('../models/Users');
 
 // Create an expense
 router.post('/', auth, async (req, res) => {
-  const { userId, category, amount, description } = req.body;
+  const { userId, categoryId, amount, description } = req.body;
+
   try {
-    const newExpense = new Expense({ userId, category, amount, description });
+    // Validate userId
+    const userExists = await User.findById(userId);
+    if (!userExists) return res.status(400).json({ message: 'Invalid userId' });
+
+    // Validate categoryId
+    const categoryExists = await Category.findById(categoryId);
+    if (!categoryExists) return res.status(400).json({ message: 'Invalid categoryId' });
+
+    // Create new expense
+    const newExpense = new Expense({ userId, categoryId, amount, description });
     await newExpense.save();
+
+    // Update category debits
+    await Category.findByIdAndUpdate(
+      categoryId,
+      { 
+        $inc: { 
+          debits: amount, 
+        } 
+      },
+      { new: true }
+    );
+
     res.status(201).json(newExpense);
   } catch (error) {
-    res.status(500).json({ message: 'Error adding expense' });
+    console.error('Error adding expense:', error.message);
+    res.status(500).json({ message: 'Error adding expense', error: error.message });
   }
 });
 
 // Get all expenses for a user
 router.get('/:userId', auth, async (req, res) => {
   try {
-    const expenses = await Expense.find({ userId: req.params.userId });
-    res.json(expenses);
+    const { userId } = req.params;
+
+    // Populate category name when fetching expenses
+    const expenses = await Expense.find({ userId })
+      .populate('categoryId', 'name') // Populate only the category name
+      .sort({ date: -1 }); // Sort by most recent expenses
+
+    res.status(200).json(expenses);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching expenses' });
   }
@@ -27,25 +58,70 @@ router.get('/:userId', auth, async (req, res) => {
 
 // Update an expense
 router.put('/:id', auth, async (req, res) => {
+  const { amount, description, categoryId } = req.body;
+
   try {
+    // Find existing expense
+    const existingExpense = await Expense.findById(req.params.id);
+    if (!existingExpense) return res.status(404).json({ message: 'Expense not found' });
+
+    const originalAmount = existingExpense.amount;
+
+    // Update expense details
     const updatedExpense = await Expense.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { amount, description },
       { new: true }
     );
-    res.json(updatedExpense);
+
+    // Reflect the difference in category debits
+    const amountDifference = amount - originalAmount;
+
+    await Category.findByIdAndUpdate(
+      categoryId,
+      { 
+        $inc: { 
+          debits: amountDifference, 
+        } 
+      },
+      { new: true }
+    );
+
+    res.status(200).json(updatedExpense);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating expense' });
+    console.error('Error updating expense:', error.message);
+    res.status(500).json({ message: 'Error updating expense', error: error.message });
   }
 });
 
 // Delete an expense
 router.delete('/:id', auth, async (req, res) => {
   try {
+    // Find expense to delete
+    const expenseToDelete = await Expense.findById(req.params.id);
+    if (!expenseToDelete) return res.status(404).json({ message: 'Expense not found' });
+
+    const { amount, categoryId } = expenseToDelete;
+
+    // Delete expense
     await Expense.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Expense deleted' });
+
+    // Update category debits and budget
+    await Category.findByIdAndUpdate(
+      categoryId,
+      { 
+        $inc: { 
+          debits: -amount, 
+          budget: +amount 
+        } 
+      },
+      { new: true }
+    );
+
+    res.status(200).json({ message: 'Expense deleted successfully' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting expense' });
+    console.error('Error deleting expense:', error.message);
+    res.status(500).json({ message: 'Error deleting expense', error: error.message });
   }
 });
 
@@ -56,7 +132,6 @@ router.get('/edit/:id', auth, async (req, res) => {
           console.log("Expense not found");
           return res.status(404).json({ message: "Expense not found" });
       }
-      console.log("Expense found:", expense);
       res.json(expense);
   } catch (error) {
       console.error("Error fetching expense:", error);

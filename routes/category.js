@@ -47,7 +47,7 @@ router.get('/budgetsummary/:userId', auth, async (req, res) => {
       const summary = categories.map((category) => ({
         name: category.name,
         budget: category.budget,
-        remaining: category.budget + category.credits - category.debits,
+        remaining: category.budget + category.credits + category.debits,
       }));
       res.json(summary);
     } catch (error) {

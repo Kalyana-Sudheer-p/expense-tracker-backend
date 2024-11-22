@@ -12,24 +12,24 @@ router.post('/', auth, async (req, res) => {
   try {
     // Validate userId
     const userExists = await User.findById(userId);
-    if (!userExists) return res.status(400).json({ message: 'Invalid userId' });
+    if (!userExists) {
+      return res.status(400).json({ message: 'Invalid userId' });
+    }
 
     // Validate categoryId
     const categoryExists = await Category.findById(categoryId);
-    if (!categoryExists) return res.status(400).json({ message: 'Invalid categoryId' });
+    if (!categoryExists) {
+      return res.status(400).json({ message: 'Invalid categoryId' });
+    }
 
-    // Create new expense
+    // Create a new expense
     const newExpense = new Expense({ userId, categoryId, amount, description });
     await newExpense.save();
 
     // Update category debits
     await Category.findByIdAndUpdate(
       categoryId,
-      { 
-        $inc: { 
-          debits: amount, 
-        } 
-      },
+      { $inc: { debits: -amount } }, // Increment debits correctly
       { new: true }
     );
 
@@ -61,31 +61,44 @@ router.put('/:id', auth, async (req, res) => {
   const { amount, description, categoryId } = req.body;
 
   try {
-    // Find existing expense
+    // Find the existing expense
     const existingExpense = await Expense.findById(req.params.id);
     if (!existingExpense) return res.status(404).json({ message: 'Expense not found' });
 
     const originalAmount = existingExpense.amount;
+    const originalCategoryId = existingExpense.categoryId.toString();
 
-    // Update expense details
+    // Update the expense details
     const updatedExpense = await Expense.findByIdAndUpdate(
       req.params.id,
-      { amount, description },
+      { amount, description, categoryId },
       { new: true }
     );
 
-    // Reflect the difference in category debits
-    const amountDifference = amount - originalAmount;
+    if (!updatedExpense) {
+      return res.status(500).json({ message: 'Failed to update expense' });
+    }
 
-    await Category.findByIdAndUpdate(
-      categoryId,
-      { 
-        $inc: { 
-          debits: amountDifference, 
-        } 
-      },
-      { new: true }
-    );
+    // Handle category updates
+    if (categoryId !== originalCategoryId) {
+      // If category changes, update both old and new categories
+      await Category.findByIdAndUpdate(
+        originalCategoryId,
+        { $inc: { debits: -originalAmount } }
+      );
+
+      await Category.findByIdAndUpdate(
+        categoryId,
+        { $inc: { debits: amount } }
+      );
+    } else {
+      // If category remains the same, adjust the debits
+      const amountDifference = amount - originalAmount;
+      await Category.findByIdAndUpdate(
+        categoryId,
+        { $inc: { debits: amountDifference } }
+      );
+    }
 
     res.status(200).json(updatedExpense);
   } catch (error) {

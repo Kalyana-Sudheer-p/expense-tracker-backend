@@ -7,7 +7,7 @@ const User = require('../models/Users');
 
 // Create an expense
 router.post('/', auth, async (req, res) => {
-  const { userId, categoryId, amount, description } = req.body;
+  const { userId, categoryId, amount, description, date } = req.body; // Accept the date from request body
 
   try {
     // Validate userId
@@ -22,14 +22,14 @@ router.post('/', auth, async (req, res) => {
       return res.status(400).json({ message: 'Invalid categoryId' });
     }
 
-    // Create a new expense
-    const newExpense = new Expense({ userId, categoryId, amount, description });
+    // Create a new expense, passing the date if available
+    const newExpense = new Expense({ userId, categoryId, amount, description, date: date || Date.now() });
     await newExpense.save();
 
     // Update category debits
     await Category.findByIdAndUpdate(
       categoryId,
-      { $inc: { debits: -amount } }, // Increment debits correctly
+      { $inc: { debits: -amount } },
       { new: true }
     );
 
@@ -58,7 +58,7 @@ router.get('/:userId', auth, async (req, res) => {
 
 // Update an expense
 router.put('/:id', auth, async (req, res) => {
-  const { amount, description, categoryId } = req.body;
+  const { amount, description, categoryId, date } = req.body; // Accept date as well
 
   try {
     // Find the existing expense
@@ -68,10 +68,10 @@ router.put('/:id', auth, async (req, res) => {
     const originalAmount = existingExpense.amount;
     const originalCategoryId = existingExpense.categoryId.toString();
 
-    // Update the expense details
+    // Update the expense details, including date if provided
     const updatedExpense = await Expense.findByIdAndUpdate(
       req.params.id,
-      { amount, description, categoryId },
+      { amount, description, categoryId, date },
       { new: true }
     );
 
@@ -81,7 +81,6 @@ router.put('/:id', auth, async (req, res) => {
 
     // Handle category updates
     if (categoryId !== originalCategoryId) {
-      // If category changes, update both old and new categories
       await Category.findByIdAndUpdate(
         originalCategoryId,
         { $inc: { debits: -originalAmount } }
@@ -92,7 +91,6 @@ router.put('/:id', auth, async (req, res) => {
         { $inc: { debits: amount } }
       );
     } else {
-      // If category remains the same, adjust the debits
       const amountDifference = amount - originalAmount;
       await Category.findByIdAndUpdate(
         categoryId,
